@@ -185,6 +185,7 @@ export async function POST(req: Request) {
 
           let fullText = "";
           let functionCalls: any[] = [];
+          const functionResponses: any[] = [];
           let toolCallIndex = 0;
 
           for await (const chunk of result.stream) {
@@ -247,6 +248,142 @@ export async function POST(req: Request) {
                   input: parsedArgs
                 });
 
+                // EXECUTE ACTION IMMEDIATELY (LIVE STREAMING)
+                try {
+                  const args: any = parsedArgs;
+                  let resultData: any = { type: "text", text: "" };
+                  let resultText = "";
+
+                  if (fc.name === "computer_use") {
+                    const action = args.action;
+
+                    switch (action) {
+                      case "screenshot": {
+                        const image = await desktop.screenshot();
+                        const base64Data = Buffer.from(image).toString("base64");
+                        resultText = "Screenshot taken successfully";
+                        resultData = { type: "image", data: base64Data };
+                        
+                        sendEvent({
+                          type: "screenshot-update",
+                          screenshot: base64Data
+                        });
+                        break;
+                      }
+                      case "wait": {
+                        const actualDuration = Math.min(args.duration || 1, 2);
+                        await new Promise(resolve => setTimeout(resolve, actualDuration * 1000));
+                        resultText = `Waited for ${actualDuration} seconds`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "left_click": {
+                        const [x, y] = args.coordinate;
+                        await desktop.moveMouse(x, y);
+                        await desktop.leftClick();
+                        resultText = `Left clicked at ${x}, ${y}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "double_click": {
+                        const [x, y] = args.coordinate;
+                        await desktop.moveMouse(x, y);
+                        await desktop.doubleClick();
+                        resultText = `Double clicked at ${x}, ${y}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "right_click": {
+                        const [x, y] = args.coordinate;
+                        await desktop.moveMouse(x, y);
+                        await desktop.rightClick();
+                        resultText = `Right clicked at ${x}, ${y}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "mouse_move": {
+                        const [x, y] = args.coordinate;
+                        await desktop.moveMouse(x, y);
+                        resultText = `Moved mouse to ${x}, ${y}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "type": {
+                        await desktop.write(args.text);
+                        resultText = `Typed: ${args.text}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "key": {
+                        const keyToPress = args.text === "Return" ? "enter" : args.text;
+                        await desktop.press(keyToPress);
+                        resultText = `Pressed key: ${args.text}`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "scroll": {
+                        const direction = args.scroll_direction as "up" | "down";
+                        const amount = args.scroll_amount || 3;
+                        await desktop.scroll(direction, amount);
+                        resultText = `Scrolled ${direction} by ${amount} clicks`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      case "left_click_drag": {
+                        const [startX, startY] = args.start_coordinate;
+                        const [endX, endY] = args.coordinate;
+                        await desktop.drag([startX, startY], [endX, endY]);
+                        resultText = `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})`;
+                        resultData = { type: "text", text: resultText };
+                        break;
+                      }
+                      default: {
+                        resultText = `Unknown action: ${action}`;
+                        resultData = { type: "text", text: resultText };
+                        console.warn("Unknown action:", action);
+                      }
+                    }
+
+                    // Send result immediately after execution
+                    sendEvent({
+                      type: "tool-output-available",
+                      toolCallId: toolCallId,
+                      output: resultData
+                    });
+
+                    functionResponses.push({
+                      name: fc.name,
+                      response: { result: resultText }
+                    });
+                  } else if (fc.name === "bash_command") {
+                    const result = await desktop.commands.run(args.command);
+                    const output = result.stdout || result.stderr || "(Command executed successfully with no output)";
+                    
+                    // Send result immediately after execution
+                    sendEvent({
+                      type: "tool-output-available",
+                      toolCallId: toolCallId,
+                      output: { type: "text", text: output }
+                    });
+                    
+                    functionResponses.push({
+                      name: fc.name,
+                      response: { result: output }
+                    });
+                  }
+                } catch (error) {
+                  console.error("Error executing tool:", error);
+                  const errorMsg = error instanceof Error ? error.message : String(error);
+                  sendEvent({
+                    type: "error",
+                    errorText: errorMsg
+                  });
+                  functionResponses.push({
+                    name: fc.name,
+                    response: { error: errorMsg }
+                  });
+                }
+
                 functionCalls.push({
                   id: toolCallId,
                   name: fc.name,
@@ -257,143 +394,7 @@ export async function POST(req: Request) {
           }
 
           if (functionCalls.length > 0) {
-            const functionResponses: any[] = [];
-
-            for (const fc of functionCalls) {
-              try {
-                const args = fc.args;
-                let resultData: any = { type: "text", text: "" };
-                let resultText = "";
-
-                if (fc.name === "computer_use") {
-                  const action = args.action;
-
-                  switch (action) {
-                    case "screenshot": {
-                      const image = await desktop.screenshot();
-                      const base64Data = Buffer.from(image).toString("base64");
-                      resultText = "Screenshot taken successfully";
-                      resultData = { type: "image", data: base64Data };
-                      
-                      sendEvent({
-                        type: "screenshot-update",
-                        screenshot: base64Data
-                      });
-                      break;
-                    }
-                    case "wait": {
-                      const actualDuration = Math.min(args.duration || 1, 2);
-                      await new Promise(resolve => setTimeout(resolve, actualDuration * 1000));
-                      resultText = `Waited for ${actualDuration} seconds`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "left_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.leftClick();
-                      resultText = `Left clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "double_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.doubleClick();
-                      resultText = `Double clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "right_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.rightClick();
-                      resultText = `Right clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "mouse_move": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      resultText = `Moved mouse to ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "type": {
-                      await desktop.write(args.text);
-                      resultText = `Typed: ${args.text}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "key": {
-                      const keyToPress = args.text === "Return" ? "enter" : args.text;
-                      await desktop.press(keyToPress);
-                      resultText = `Pressed key: ${args.text}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "scroll": {
-                      const direction = args.scroll_direction as "up" | "down";
-                      const amount = args.scroll_amount || 3;
-                      await desktop.scroll(direction, amount);
-                      resultText = `Scrolled ${direction} by ${amount} clicks`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "left_click_drag": {
-                      const [startX, startY] = args.start_coordinate;
-                      const [endX, endY] = args.coordinate;
-                      await desktop.drag([startX, startY], [endX, endY]);
-                      resultText = `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    default: {
-                      resultText = `Unknown action: ${action}`;
-                      resultData = { type: "text", text: resultText };
-                      console.warn("Unknown action:", action);
-                    }
-                  }
-
-                  sendEvent({
-                    type: "tool-output-available",
-                    toolCallId: fc.id,
-                    output: resultData
-                  });
-
-                  functionResponses.push({
-                    name: fc.name,
-                    response: { result: resultText }
-                  });
-                } else if (fc.name === "bash_command") {
-                  const result = await desktop.commands.run(args.command);
-                  const output = result.stdout || result.stderr || "(Command executed successfully with no output)";
-                  
-                  sendEvent({
-                    type: "tool-output-available",
-                    toolCallId: fc.id,
-                    output: { type: "text", text: output }
-                  });
-                  
-                  functionResponses.push({
-                    name: fc.name,
-                    response: { result: output }
-                  });
-                }
-              } catch (error) {
-                console.error("Error executing tool:", error);
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                sendEvent({
-                  type: "error",
-                  errorText: errorMsg
-                });
-                functionResponses.push({
-                  name: fc.name,
-                  response: { error: errorMsg }
-                });
-              }
-            }
-
+            // Take screenshot after all actions in this turn are completed
             const newScreenshot = await desktop.screenshot();
             const newScreenshotBase64 = Buffer.from(newScreenshot).toString('base64');
             
