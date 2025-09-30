@@ -136,6 +136,20 @@ const PurePreviewMessage = ({
                               : argsText ? `(streaming...)` : "";
                             ActionIcon = MousePointerClick;
                             break;
+                          case "double_click":
+                            actionLabel = "Double clicking";
+                            actionDetail = coordinate
+                              ? `at (${coordinate[0]}, ${coordinate[1]})`
+                              : argsText ? `(streaming...)` : "";
+                            ActionIcon = MousePointerClick;
+                            break;
+                          case "mouse_move":
+                            actionLabel = "Moving mouse";
+                            actionDetail = coordinate
+                              ? `to (${coordinate[0]}, ${coordinate[1]})`
+                              : argsText ? `(streaming...)` : "";
+                            ActionIcon = MousePointer;
+                            break;
                           case "type":
                             actionLabel = "Typing";
                             actionDetail = text ? `"${text}"` : argsText ? `(streaming...)` : "";
@@ -145,6 +159,27 @@ const PurePreviewMessage = ({
                             actionLabel = "Pressing key";
                             actionDetail = text ? `"${text}"` : argsText ? `(streaming...)` : "";
                             ActionIcon = KeyRound;
+                            break;
+                          case "wait":
+                            actionLabel = "Waiting";
+                            actionDetail = duration ? `${duration} seconds` : argsText ? `(streaming...)` : "";
+                            ActionIcon = Clock;
+                            break;
+                          case "scroll":
+                            actionLabel = "Scrolling";
+                            actionDetail =
+                              scroll_direction && scroll_amount
+                                ? `${scroll_direction} by ${scroll_amount}`
+                                : argsText ? `(streaming...)` : "";
+                            ActionIcon = ScrollText;
+                            break;
+                          case "left_click_drag":
+                            actionLabel = "Dragging";
+                            const { start_coordinate } = args;
+                            actionDetail = start_coordinate && coordinate
+                              ? `from (${start_coordinate[0]}, ${start_coordinate[1]}) to (${coordinate[0]}, ${coordinate[1]})`
+                              : argsText ? `(streaming...)` : "";
+                            ActionIcon = MousePointer;
                             break;
                           default:
                             actionLabel = action;
@@ -215,6 +250,14 @@ const PurePreviewMessage = ({
                               ? `${scroll_direction} by ${scroll_amount}`
                               : "";
                           ActionIcon = ScrollText;
+                          break;
+                        case "left_click_drag":
+                          actionLabel = "Dragging";
+                          const { start_coordinate } = args;
+                          actionDetail = start_coordinate && coordinate
+                            ? `from (${start_coordinate[0]}, ${start_coordinate[1]}) to (${coordinate[0]}, ${coordinate[1]})`
+                            : "";
+                          ActionIcon = MousePointer;
                           break;
                         default:
                           actionLabel = action;
