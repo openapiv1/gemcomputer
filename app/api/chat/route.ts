@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { killDesktop, getDesktop } from "@/lib/e2b/utils";
-import { resolution } from "@/lib/e2b/tool";
+import { E2BDesktopServer, E2BDesktopClient } from "@/lib/mcp";
 
 const GEMINI_API_KEY = "AIzaSyA_8oLS-4FgJJ9-x7l5_xl1RORmJyUUKzw";
 
@@ -133,8 +133,17 @@ export async function POST(req: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(eventWithTimestamp)}\n\n`));
       };
 
+      let mcpClient: E2BDesktopClient | null = null;
+      
       try {
         const desktop = await getDesktop(sandboxId);
+        
+        // Initialize MCP server and client
+        const mcpServer = new E2BDesktopServer();
+        mcpServer.setDesktop(desktop);
+        
+        mcpClient = new E2BDesktopClient();
+        await mcpClient.connect(mcpServer);
         
         const screenshot = await desktop.screenshot();
         const screenshotBase64 = Buffer.from(screenshot).toString('base64');
@@ -220,7 +229,7 @@ export async function POST(req: Request) {
                 if (typeof fc.args === 'string') {
                   try {
                     parsedArgs = JSON.parse(fc.args);
-                  } catch (e) {
+                  } catch {
                     console.error("Failed to parse function args:", fc.args);
                     parsedArgs = {};
                   }
@@ -310,90 +319,22 @@ export async function POST(req: Request) {
                     status: "executing"
                   });
 
-                  switch (action) {
-                    case "screenshot": {
-                      const image = await desktop.screenshot();
-                      const base64Data = Buffer.from(image).toString("base64");
-                      resultText = "Screenshot taken successfully";
-                      resultData = { type: "image", data: base64Data };
-                      
+                  // Execute action via MCP
+                  const mcpResult = await mcpClient.callTool("computer_use", args);
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const mcpContent: any = (mcpResult.content as any)[0];
+                  
+                  if (mcpContent.type === "text") {
+                    const parsedResult = JSON.parse(mcpContent.text);
+                    resultData = parsedResult;
+                    resultText = parsedResult.text || parsedResult.data || "Action completed";
+                    
+                    // Handle screenshot result
+                    if (parsedResult.type === "image" && parsedResult.data) {
                       sendEvent({
                         type: "screenshot-update",
-                        screenshot: base64Data
+                        screenshot: parsedResult.data
                       });
-                      break;
-                    }
-                    case "wait": {
-                      const actualDuration = Math.min(args.duration || 1, 2);
-                      await new Promise(resolve => setTimeout(resolve, actualDuration * 1000));
-                      resultText = `Waited for ${actualDuration} seconds`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "left_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.leftClick();
-                      resultText = `Left clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "double_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.doubleClick();
-                      resultText = `Double clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "right_click": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      await desktop.rightClick();
-                      resultText = `Right clicked at ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "mouse_move": {
-                      const [x, y] = args.coordinate;
-                      await desktop.moveMouse(x, y);
-                      resultText = `Moved mouse to ${x}, ${y}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "type": {
-                      await desktop.write(args.text);
-                      resultText = `Typed: ${args.text}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "key": {
-                      const keyToPress = args.text === "Return" ? "enter" : args.text;
-                      await desktop.press(keyToPress);
-                      resultText = `Pressed key: ${args.text}`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "scroll": {
-                      const direction = args.scroll_direction as "up" | "down";
-                      const amount = args.scroll_amount || 3;
-                      await desktop.scroll(direction, amount);
-                      resultText = `Scrolled ${direction} by ${amount} clicks`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    case "left_click_drag": {
-                      const [startX, startY] = args.start_coordinate;
-                      const [endX, endY] = args.coordinate;
-                      await desktop.drag([startX, startY], [endX, endY]);
-                      resultText = `Dragged from (${startX}, ${startY}) to (${endX}, ${endY})`;
-                      resultData = { type: "text", text: resultText };
-                      break;
-                    }
-                    default: {
-                      resultText = `Unknown action: ${action}`;
-                      resultData = { type: "text", text: resultText };
-                      console.warn("Unknown action:", action);
                     }
                   }
 
@@ -441,8 +382,11 @@ export async function POST(req: Request) {
                     response: { result: resultText }
                   });
                 } else if (fc.name === "bash_command") {
-                  const result = await desktop.commands.run(args.command);
-                  const output = result.stdout || result.stderr || "(Command executed successfully with no output)";
+                  // Execute bash command via MCP
+                  const mcpResult = await mcpClient.callTool("bash_command", args);
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  const mcpContent: any = (mcpResult.content as any)[0];
+                  const output = mcpContent.type === "text" ? mcpContent.text : "(Command executed)";
                   
                   sendEvent({
                     type: "tool-output-available",
@@ -533,6 +477,15 @@ export async function POST(req: Request) {
           errorText: String(error)
         });
         controller.close();
+      } finally {
+        // Cleanup MCP client if it exists
+        try {
+          if (mcpClient) {
+            await mcpClient.close();
+          }
+        } catch {
+          // Error closing MCP client - ignore
+        }
       }
     }
   });
