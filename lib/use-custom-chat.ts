@@ -91,6 +91,11 @@ export function useCustomChat(options: UseChatOptions) {
             try {
               const data = JSON.parse(line.slice(6));
 
+              // Log all events for debugging (can be removed in production)
+              if (process.env.NODE_ENV === 'development') {
+                console.log('[SSE Event]', data.type, data);
+              }
+
               if (data.type === "text-delta") {
                 assistantMessage.content += data.delta;
                 setMessages((prev) => {
@@ -175,6 +180,21 @@ export function useCustomChat(options: UseChatOptions) {
               } else if (data.type === "screenshot-update") {
                 // Screenshot update - można obsłużyć jeśli potrzeba
                 console.log("Screenshot updated");
+              } else if (data.type === "action_start") {
+                // Log action start for debugging
+                console.log(`[Action Start] ${data.action}`, data.args);
+              } else if (data.type === "action_executing") {
+                // Log action executing for debugging
+                console.log(`[Action Executing] ${data.actionId}`);
+              } else if (data.type === "action_complete") {
+                // Log action complete for debugging
+                console.log(`[Action Complete] ${data.action} - ${data.status}`, data.result);
+              } else if (data.type === "action_screenshot_before") {
+                // Log screenshot before for debugging
+                console.log(`[Screenshot Before Action] ${data.actionId}`);
+              } else if (data.type === "action_screenshot_after") {
+                // Log screenshot after for debugging
+                console.log(`[Screenshot After Action] ${data.actionId}`);
               } else if (data.type === "pre-action-screenshot") {
                 if (!assistantMessage.preActionScreenshots) {
                   assistantMessage.preActionScreenshots = {};
