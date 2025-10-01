@@ -478,6 +478,8 @@ export const PreviewMessage = memo(
     if (prevProps.status !== nextProps.status) return false;
     if (prevProps.message.content !== nextProps.message.content) return false;
     if (!equal(prevProps.message.parts, nextProps.message.parts)) return false;
+    if (!equal(prevProps.message.preActionScreenshots, nextProps.message.preActionScreenshots)) return false;
+    if (!equal(prevProps.message.postActionScreenshots, nextProps.message.postActionScreenshots)) return false;
 
     return true;
   },
