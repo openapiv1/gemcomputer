@@ -7,6 +7,8 @@ type Message = {
   role: "user" | "assistant";
   content: string;
   parts?: any[];
+  preActionScreenshots?: Record<string, string>; // toolCallId -> base64 image
+  postActionScreenshots?: Record<string, string>; // toolCallId -> base64 image
 };
 
 type UseChatOptions = {
@@ -71,6 +73,8 @@ export function useCustomChat(options: UseChatOptions) {
         role: "assistant",
         content: "",
         parts: [],
+        preActionScreenshots: {},
+        postActionScreenshots: {},
       };
       currentMessageRef.current = assistantMessage;
       setMessages((prev) => [...prev, assistantMessage]);
@@ -171,6 +175,26 @@ export function useCustomChat(options: UseChatOptions) {
               } else if (data.type === "screenshot-update") {
                 // Screenshot update - można obsłużyć jeśli potrzeba
                 console.log("Screenshot updated");
+              } else if (data.type === "pre-action-screenshot") {
+                if (!assistantMessage.preActionScreenshots) {
+                  assistantMessage.preActionScreenshots = {};
+                }
+                assistantMessage.preActionScreenshots[data.toolCallId] = data.screenshot;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  return newMessages;
+                });
+              } else if (data.type === "post-action-screenshot") {
+                if (!assistantMessage.postActionScreenshots) {
+                  assistantMessage.postActionScreenshots = {};
+                }
+                assistantMessage.postActionScreenshots[data.toolCallId] = data.screenshot;
+                setMessages((prev) => {
+                  const newMessages = [...prev];
+                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  return newMessages;
+                });
               } else if (data.type === "error") {
                 throw new Error(data.errorText);
               }
