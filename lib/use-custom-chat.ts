@@ -97,10 +97,14 @@ export function useCustomChat(options: UseChatOptions) {
               }
 
               if (data.type === "text-delta") {
-                assistantMessage.content += data.delta;
+                assistantMessage = {
+                  ...assistantMessage,
+                  content: assistantMessage.content + data.delta
+                };
+                currentMessageRef.current = assistantMessage;
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  newMessages[newMessages.length - 1] = assistantMessage;
                   return newMessages;
                 });
               } else if (data.type === "tool-call-start") {
@@ -114,68 +118,133 @@ export function useCustomChat(options: UseChatOptions) {
                     state: "streaming",
                   },
                 };
-                assistantMessage.parts = [...(assistantMessage.parts || []), toolPart];
+                assistantMessage = {
+                  ...assistantMessage,
+                  parts: [...(assistantMessage.parts || []), toolPart]
+                };
+                currentMessageRef.current = assistantMessage;
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  newMessages[newMessages.length - 1] = assistantMessage;
                   return newMessages;
                 });
               } else if (data.type === "tool-name-delta") {
-                const toolPart = assistantMessage.parts?.find(
+                const toolPartIndex = assistantMessage.parts?.findIndex(
                   (p: any) => p.type === "tool-invocation" && p.toolInvocation.toolCallId === data.toolCallId
                 );
-                if (toolPart?.type === "tool-invocation") {
-                  toolPart.toolInvocation.toolName = data.toolName;
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = { ...assistantMessage };
-                    return newMessages;
-                  });
+                if (toolPartIndex !== undefined && toolPartIndex !== -1 && assistantMessage.parts) {
+                  const toolPart = assistantMessage.parts[toolPartIndex];
+                  if (toolPart?.type === "tool-invocation") {
+                    const updatedParts = [...assistantMessage.parts];
+                    updatedParts[toolPartIndex] = {
+                      ...toolPart,
+                      toolInvocation: {
+                        ...toolPart.toolInvocation,
+                        toolName: data.toolName
+                      }
+                    };
+                    assistantMessage = {
+                      ...assistantMessage,
+                      parts: updatedParts
+                    };
+                    currentMessageRef.current = assistantMessage;
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      newMessages[newMessages.length - 1] = assistantMessage;
+                      return newMessages;
+                    });
+                  }
                 }
               } else if (data.type === "tool-argument-delta") {
-                const toolPart = assistantMessage.parts?.find(
+                const toolPartIndex = assistantMessage.parts?.findIndex(
                   (p: any) => p.type === "tool-invocation" && p.toolInvocation.toolCallId === data.toolCallId
                 );
-                if (toolPart?.type === "tool-invocation") {
-                  toolPart.toolInvocation.argsText = (toolPart.toolInvocation.argsText || "") + data.delta;
-                  try {
-                    toolPart.toolInvocation.args = JSON.parse(toolPart.toolInvocation.argsText);
-                  } catch (e) {
+                if (toolPartIndex !== undefined && toolPartIndex !== -1 && assistantMessage.parts) {
+                  const toolPart = assistantMessage.parts[toolPartIndex];
+                  if (toolPart?.type === "tool-invocation") {
+                    const updatedArgsText = (toolPart.toolInvocation.argsText || "") + data.delta;
+                    let updatedArgs = toolPart.toolInvocation.args;
+                    try {
+                      updatedArgs = JSON.parse(updatedArgsText);
+                    } catch (e) {
+                      // Keep existing args if parse fails
+                    }
+                    const updatedParts = [...assistantMessage.parts];
+                    updatedParts[toolPartIndex] = {
+                      ...toolPart,
+                      toolInvocation: {
+                        ...toolPart.toolInvocation,
+                        argsText: updatedArgsText,
+                        args: updatedArgs
+                      }
+                    };
+                    assistantMessage = {
+                      ...assistantMessage,
+                      parts: updatedParts
+                    };
+                    currentMessageRef.current = assistantMessage;
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      newMessages[newMessages.length - 1] = assistantMessage;
+                      return newMessages;
+                    });
                   }
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = { ...assistantMessage };
-                    return newMessages;
-                  });
                 }
               } else if (data.type === "tool-input-available") {
-                const toolPart = assistantMessage.parts?.find(
+                const toolPartIndex = assistantMessage.parts?.findIndex(
                   (p: any) => p.type === "tool-invocation" && p.toolInvocation.toolCallId === data.toolCallId
                 );
-                if (toolPart?.type === "tool-invocation") {
-                  toolPart.toolInvocation.args = data.input;
-                  toolPart.toolInvocation.state = "call";
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = { ...assistantMessage };
-                    return newMessages;
-                  });
+                if (toolPartIndex !== undefined && toolPartIndex !== -1 && assistantMessage.parts) {
+                  const toolPart = assistantMessage.parts[toolPartIndex];
+                  if (toolPart?.type === "tool-invocation") {
+                    const updatedParts = [...assistantMessage.parts];
+                    updatedParts[toolPartIndex] = {
+                      ...toolPart,
+                      toolInvocation: {
+                        ...toolPart.toolInvocation,
+                        args: data.input,
+                        state: "call"
+                      }
+                    };
+                    assistantMessage = {
+                      ...assistantMessage,
+                      parts: updatedParts
+                    };
+                    currentMessageRef.current = assistantMessage;
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      newMessages[newMessages.length - 1] = assistantMessage;
+                      return newMessages;
+                    });
+                  }
                 }
               } else if (data.type === "tool-output-available") {
-                const toolPart = assistantMessage.parts?.find(
+                const toolPartIndex = assistantMessage.parts?.findIndex(
                   (p: any) => p.type === "tool-invocation" && p.toolInvocation.toolCallId === data.toolCallId
                 );
-                if (toolPart?.type === "tool-invocation") {
-                  toolPart.toolInvocation = {
-                    ...toolPart.toolInvocation,
-                    state: "result",
-                    result: data.output,
-                  };
-                  setMessages((prev) => {
-                    const newMessages = [...prev];
-                    newMessages[newMessages.length - 1] = { ...assistantMessage };
-                    return newMessages;
-                  });
+                if (toolPartIndex !== undefined && toolPartIndex !== -1 && assistantMessage.parts) {
+                  const toolPart = assistantMessage.parts[toolPartIndex];
+                  if (toolPart?.type === "tool-invocation") {
+                    const updatedParts = [...assistantMessage.parts];
+                    updatedParts[toolPartIndex] = {
+                      ...toolPart,
+                      toolInvocation: {
+                        ...toolPart.toolInvocation,
+                        state: "result",
+                        result: data.output,
+                      }
+                    };
+                    assistantMessage = {
+                      ...assistantMessage,
+                      parts: updatedParts
+                    };
+                    currentMessageRef.current = assistantMessage;
+                    setMessages((prev) => {
+                      const newMessages = [...prev];
+                      newMessages[newMessages.length - 1] = assistantMessage;
+                      return newMessages;
+                    });
+                  }
                 }
               } else if (data.type === "screenshot-update") {
                 // Screenshot update - można obsłużyć jeśli potrzeba
@@ -196,23 +265,31 @@ export function useCustomChat(options: UseChatOptions) {
                 // Log screenshot after for debugging
                 console.log(`[Screenshot After Action] ${data.actionId}`);
               } else if (data.type === "pre-action-screenshot") {
-                if (!assistantMessage.preActionScreenshots) {
-                  assistantMessage.preActionScreenshots = {};
-                }
-                assistantMessage.preActionScreenshots[data.toolCallId] = data.screenshot;
+                assistantMessage = {
+                  ...assistantMessage,
+                  preActionScreenshots: {
+                    ...(assistantMessage.preActionScreenshots || {}),
+                    [data.toolCallId]: data.screenshot
+                  }
+                };
+                currentMessageRef.current = assistantMessage;
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  newMessages[newMessages.length - 1] = assistantMessage;
                   return newMessages;
                 });
               } else if (data.type === "post-action-screenshot") {
-                if (!assistantMessage.postActionScreenshots) {
-                  assistantMessage.postActionScreenshots = {};
-                }
-                assistantMessage.postActionScreenshots[data.toolCallId] = data.screenshot;
+                assistantMessage = {
+                  ...assistantMessage,
+                  postActionScreenshots: {
+                    ...(assistantMessage.postActionScreenshots || {}),
+                    [data.toolCallId]: data.screenshot
+                  }
+                };
+                currentMessageRef.current = assistantMessage;
                 setMessages((prev) => {
                   const newMessages = [...prev];
-                  newMessages[newMessages.length - 1] = { ...assistantMessage };
+                  newMessages[newMessages.length - 1] = assistantMessage;
                   return newMessages;
                 });
               } else if (data.type === "error") {
