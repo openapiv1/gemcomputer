@@ -405,25 +405,43 @@ const PurePreviewMessage = ({
                         initial={{ y: 5, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         key={`message-${message.id}-part-${i}`}
-                        className="flex items-center gap-2 p-2 mb-3 text-sm bg-zinc-50 dark:bg-zinc-900 rounded-md border border-zinc-200 dark:border-zinc-800"
+                        className={cn(
+                          "flex items-center gap-2 p-2 mb-3 text-sm rounded-md border",
+                          {
+                            "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-800": state === "streaming",
+                            "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800": state === "call" && isLatestMessage && status !== "ready",
+                            "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800": state === "result",
+                            "bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800": state === "call" && (!isLatestMessage || status === "ready"),
+                          }
+                        )}
                       >
                         <div className="flex items-center justify-center w-8 h-8 bg-zinc-50 dark:bg-zinc-800 rounded-full">
                           <ScrollText className="w-4 h-4" />
                         </div>
                         <div className="flex-1">
                           <div className="font-medium flex items-baseline gap-2">
+                            {/* Status emoji prefix */}
+                            {state === "streaming" && <span className="animate-pulse">⏳</span>}
+                            {state === "call" && isLatestMessage && status !== "ready" && <span className="animate-pulse">⚡</span>}
+                            {state === "result" && <span>✅</span>}
                             {state === "streaming" ? "Generating command" : "Running command"}
                             <span className="text-xs text-zinc-500 dark:text-zinc-400 font-normal font-mono">
                               {displayCommand}
                             </span>
                           </div>
+                          {/* Status label */}
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            {state === "streaming" && "Pending..."}
+                            {state === "call" && isLatestMessage && status !== "ready" && "Executing..."}
+                            {state === "result" && "Success"}
+                          </div>
                         </div>
                         <div className="w-5 h-5 flex items-center justify-center">
                           {state === "streaming" ? (
-                            <Loader2 className="animate-spin h-4 w-4 text-blue-500" />
+                            <Loader2 className="animate-spin h-4 w-4 text-orange-500" />
                           ) : state === "call" ? (
                             isLatestMessage && status !== "ready" ? (
-                              <Loader2 className="animate-spin h-4 w-4 text-zinc-500" />
+                              <Loader2 className="animate-spin h-4 w-4 text-yellow-500" />
                             ) : (
                               <StopCircle className="h-4 w-4 text-red-500" />
                             )
