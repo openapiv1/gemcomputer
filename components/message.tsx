@@ -32,7 +32,7 @@ const PurePreviewMessage = ({
   isLatestMessage,
   status,
 }: {
-  message: Message;
+  message: Message & { preActionScreenshots?: Record<string, string>; postActionScreenshots?: Record<string, string> };
   isLoading: boolean;
   status: "error" | "submitted" | "streaming" | "ready";
   isLatestMessage: boolean;
@@ -313,13 +313,26 @@ const PurePreviewMessage = ({
                             ) : null}
                           </div>
                         </div>
+                        {/* Pre-action screenshot */}
+                        {message.preActionScreenshots && message.preActionScreenshots[toolCallId] && action !== "screenshot" && (
+                          <div className="p-2 border-t border-zinc-200 dark:border-zinc-800">
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1 font-medium">Before action:</div>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`data:image/png;base64,${message.preActionScreenshots[toolCallId]}`}
+                              alt="Pre-action Screenshot"
+                              className="w-full aspect-[1024/768] rounded-sm"
+                            />
+                          </div>
+                        )}
+                        {/* Result screenshot for screenshot action */}
                         {state === "result" ? (
                           part.toolInvocation.result.type === "image" && (
-                            <div className="p-2">
+                            <div className="p-2 border-t border-zinc-200 dark:border-zinc-800">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={`data:image/png;base64,${part.toolInvocation.result.data}`}
-                                alt="Generated Image"
+                                alt="Screenshot"
                                 className="w-full aspect-[1024/768] rounded-sm"
                               />
                             </div>
@@ -327,6 +340,18 @@ const PurePreviewMessage = ({
                         ) : action === "screenshot" ? (
                           <div className="w-full aspect-[1024/768] rounded-sm bg-zinc-200 dark:bg-zinc-800 animate-pulse"></div>
                         ) : null}
+                        {/* Post-action screenshot */}
+                        {message.postActionScreenshots && message.postActionScreenshots[toolCallId] && action !== "screenshot" && (
+                          <div className="p-2 border-t border-zinc-200 dark:border-zinc-800">
+                            <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-1 font-medium">After action:</div>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`data:image/png;base64,${message.postActionScreenshots[toolCallId]}`}
+                              alt="Post-action Screenshot"
+                              className="w-full aspect-[1024/768] rounded-sm"
+                            />
+                          </div>
+                        )}
                       </motion.div>
                     );
                   }

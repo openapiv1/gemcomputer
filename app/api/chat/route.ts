@@ -143,7 +143,12 @@ export async function POST(req: Request) {
         const model = genAI.getGenerativeModel({
           model: "gemini-2.5-flash",
           systemInstruction: INSTRUCTIONS,
-          tools: [{ functionDeclarations: tools as any }]
+          tools: [{ functionDeclarations: tools as any }],
+          toolConfig: {
+            functionCallingConfig: {
+              mode: "ANY" as any // Allow multiple function calls
+            }
+          }
         });
 
         const chatHistory: any[] = [];
@@ -268,6 +273,18 @@ export async function POST(req: Request) {
                 if (fc.name === "computer_use") {
                   const action = args.action;
 
+                  // Take screenshot BEFORE action (except for screenshot action itself)
+                  if (action !== "screenshot") {
+                    const preActionScreenshot = await desktop.screenshot();
+                    const preActionBase64 = Buffer.from(preActionScreenshot).toString('base64');
+                    
+                    sendEvent({
+                      type: "pre-action-screenshot",
+                      toolCallId: fc.id,
+                      screenshot: preActionBase64
+                    });
+                  }
+
                   switch (action) {
                     case "screenshot": {
                       const image = await desktop.screenshot();
@@ -355,6 +372,24 @@ export async function POST(req: Request) {
                     }
                   }
 
+                  // Take screenshot AFTER action (except for screenshot action itself)
+                  if (action !== "screenshot") {
+                    const postActionScreenshot = await desktop.screenshot();
+                    const postActionBase64 = Buffer.from(postActionScreenshot).toString('base64');
+                    
+                    sendEvent({
+                      type: "post-action-screenshot",
+                      toolCallId: fc.id,
+                      screenshot: postActionBase64
+                    });
+                    
+                    // Also update the main screenshot view
+                    sendEvent({
+                      type: "screenshot-update",
+                      screenshot: postActionBase64
+                    });
+                  }
+
                   sendEvent({
                     type: "tool-output-available",
                     toolCallId: fc.id,
@@ -394,14 +429,7 @@ export async function POST(req: Request) {
               }
             }
 
-            const newScreenshot = await desktop.screenshot();
-            const newScreenshotBase64 = Buffer.from(newScreenshot).toString('base64');
-            
-            sendEvent({
-              type: "screenshot-update",
-              screenshot: newScreenshotBase64
-            });
-
+            // Continue conversation with function responses
             chatHistory.push({
               role: "model",
               parts: functionCalls.map(fc => ({
@@ -422,6 +450,10 @@ export async function POST(req: Request) {
               }))
             });
 
+            // Get the latest screenshot to add to context
+            const latestScreenshot = await desktop.screenshot();
+            const latestScreenshotBase64 = Buffer.from(latestScreenshot).toString('base64');
+
             chatHistory.push({
               role: "user",
               parts: [
@@ -429,7 +461,7 @@ export async function POST(req: Request) {
                 {
                   inlineData: {
                     mimeType: "image/png",
-                    data: newScreenshotBase64
+                    data: latestScreenshotBase64
                   }
                 }
               ]
