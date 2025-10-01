@@ -126,7 +126,11 @@ export async function POST(req: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const sendEvent = (data: any) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        const eventWithTimestamp = {
+          ...data,
+          timestamp: Date.now()
+        };
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(eventWithTimestamp)}\n\n`));
       };
 
       try {
@@ -273,6 +277,14 @@ export async function POST(req: Request) {
                 if (fc.name === "computer_use") {
                   const action = args.action;
 
+                  // Send action_start event
+                  sendEvent({
+                    type: "action_start",
+                    actionId: fc.id,
+                    action: action,
+                    args: args
+                  });
+
                   // Take screenshot BEFORE action (except for screenshot action itself)
                   if (action !== "screenshot") {
                     const preActionScreenshot = await desktop.screenshot();
@@ -283,7 +295,20 @@ export async function POST(req: Request) {
                       toolCallId: fc.id,
                       screenshot: preActionBase64
                     });
+                    
+                    sendEvent({
+                      type: "action_screenshot_before",
+                      actionId: fc.id,
+                      image: preActionBase64
+                    });
                   }
+
+                  // Send action_executing event
+                  sendEvent({
+                    type: "action_executing",
+                    actionId: fc.id,
+                    status: "executing"
+                  });
 
                   switch (action) {
                     case "screenshot": {
@@ -383,12 +408,27 @@ export async function POST(req: Request) {
                       screenshot: postActionBase64
                     });
                     
+                    sendEvent({
+                      type: "action_screenshot_after",
+                      actionId: fc.id,
+                      image: postActionBase64
+                    });
+                    
                     // Also update the main screenshot view
                     sendEvent({
                       type: "screenshot-update",
                       screenshot: postActionBase64
                     });
                   }
+
+                  // Send action_complete event
+                  sendEvent({
+                    type: "action_complete",
+                    actionId: fc.id,
+                    action: action,
+                    result: resultData,
+                    status: "success"
+                  });
 
                   sendEvent({
                     type: "tool-output-available",
@@ -418,6 +458,16 @@ export async function POST(req: Request) {
               } catch (error) {
                 console.error("Error executing tool:", error);
                 const errorMsg = error instanceof Error ? error.message : String(error);
+                
+                // Send action_complete with error status
+                sendEvent({
+                  type: "action_complete",
+                  actionId: fc.id,
+                  action: fc.args?.action || "unknown",
+                  result: { error: errorMsg },
+                  status: "error"
+                });
+                
                 sendEvent({
                   type: "error",
                   errorText: errorMsg
